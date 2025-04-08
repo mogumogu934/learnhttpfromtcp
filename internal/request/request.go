@@ -11,6 +11,7 @@ import (
 const bufferSize = 8
 const stateInitialized = 0
 const stateDone = 1
+const CRLF = "\r\n"
 
 type Request struct {
 	RequestLine RequestLine
@@ -112,7 +113,7 @@ func (r *Request) parse(data []byte) (int, error) {
 }
 
 func parseRequestLine(data []byte) (parsedLine *RequestLine, numBytesParsed int, err error) {
-	endIndex := bytes.Index(data, []byte("\r\n"))
+	endIndex := bytes.Index(data, []byte(CRLF))
 	if endIndex == -1 {
 		return nil, 0, nil
 	}
@@ -129,7 +130,7 @@ func parseRequestLine(data []byte) (parsedLine *RequestLine, numBytesParsed int,
 		parts[0] != "PUT" &&
 		parts[0] != "PATCH" &&
 		parts[0] != "DELETE" {
-		return nil, 0, errors.New("invalid request line")
+		return nil, 0, errors.New("invalid request method")
 	}
 
 	if parts[1][0] != '/' {

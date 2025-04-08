@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"net"
+
+	"github.com/mogumogu934/learnhttpfromtcp/internal/request"
 )
 
 func main() {
@@ -23,31 +23,14 @@ func main() {
 		}
 		fmt.Printf("Connection to port %s accepted\n", port[1:])
 
-		linesChan := getLinesChannel(conn)
-		for l := range linesChan {
-			fmt.Printf("%s\n", l)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Printf("unable to parse request: %v", err)
 		}
-		fmt.Printf("Connection to port %s closed\n", port[1:])
+
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", req.RequestLine.HttpVersion)
 	}
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	lines := make(chan string)
-
-	go func() {
-		defer close(lines)
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			line := scanner.Text()
-			lines <- line
-		}
-
-		if err := scanner.Err(); err != nil {
-			log.Printf("error reading file: %v", err)
-		}
-	}()
-
-	return lines
 }
