@@ -48,9 +48,8 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	return endIndex + 2, false, nil
 }
 
-func validateFieldName(fieldName string) bool {
+func validateFieldName(fieldName string) (valid bool) {
 	validChars := "!#$%&'*+-.^_`|~"
-
 	for _, c := range fieldName {
 		if !unicode.IsLetter(c) && !unicode.IsNumber(c) && !strings.ContainsRune(validChars, c) {
 			return false
@@ -58,4 +57,8 @@ func validateFieldName(fieldName string) bool {
 	}
 
 	return true
+}
+
+func (h Headers) Get(key string) (value string) {
+	return h[strings.ToLower(key)]
 }
