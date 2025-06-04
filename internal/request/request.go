@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/mogumogu934/learnhttpfromtcp/internal/headers"
@@ -12,15 +13,17 @@ import (
 
 const (
 	bufferSize                 = 8
+	CRLF                       = "\r\n"
 	requestStateInitialized    = 0
 	requestStateDone           = 1
 	requestStateParsingHeaders = 2
-	CRLF                       = "\r\n"
+	requestStateParsingBody    = 3
 )
 
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       int
 }
 
@@ -148,9 +151,29 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.state = requestStateDone
+			r.state = requestStateParsingBody
 		}
 		return numBytesParsed, nil
+	case requestStateParsingBody:
+		contentLength := r.Headers.Get("Content-Length")
+		if contentLength == "" {
+			// Content-length header does not exist. Nothing to parse.
+			r.state = requestStateDone
+			return 0, nil
+		}
+		n, err := strconv.Atoi(contentLength)
+		if err != nil {
+			return 0, errors.New("error: unable to convert content-length string to int")
+		}
+
+		r.Body = append(r.Body, data...)
+		if len(r.Body) > n {
+			return 0, errors.New("error: length of body is greater than size specified by content-length header")
+		}
+		if len(r.Body) == n {
+			r.state = requestStateDone
+		}
+		return len(data), nil
 	case requestStateDone:
 		return 0, errors.New("error: trying to read data in a done state")
 	default:
