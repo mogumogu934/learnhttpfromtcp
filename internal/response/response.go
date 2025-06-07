@@ -9,26 +9,26 @@ import (
 )
 
 const (
-	StatusOK                  = 200
-	StatusBadRequest          = 400
-	StatusInternalServerError = 500
-	CRLF                      = "\r\n"
+	StatusCodeOK                  = 200
+	StatusCodeBadRequest          = 400
+	StatusCodeInternalServerError = 500
+	CRLF                          = "\r\n"
 )
 
 func WriteStatusLine(w io.Writer, statusCode int) error {
 	base := fmt.Sprintf("HTTP/1.1 %v ", statusCode)
 	switch statusCode {
-	case StatusOK:
+	case StatusCodeOK:
 		_, err := w.Write([]byte(base + "OK" + CRLF))
 		if err != nil {
 			return fmt.Errorf("unable to write status line: %v", err)
 		}
-	case StatusBadRequest:
+	case StatusCodeBadRequest:
 		_, err := w.Write([]byte(base + "Bad Request" + CRLF))
 		if err != nil {
 			return fmt.Errorf("unable to write status line: %v", err)
 		}
-	case StatusInternalServerError:
+	case StatusCodeInternalServerError:
 		_, err := w.Write([]byte(base + "Internal Server Error" + CRLF))
 		if err != nil {
 			return fmt.Errorf("unable to write status line: %v", err)
