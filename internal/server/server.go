@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"sync/atomic"
@@ -12,20 +10,7 @@ import (
 	"github.com/mogumogu934/learnhttpfromtcp/internal/response"
 )
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
-
-type HandlerError struct {
-	StatusCode int
-	Message    string
-}
-
-func (he HandlerError) Write(w io.Writer) {
-	response.WriteStatusLine(w, he.StatusCode)
-	msgBytes := []byte(he.Message)
-	headers := response.GetDefaultHeaders(len(msgBytes))
-	response.WriteHeaders(w, headers)
-	w.Write(msgBytes)
-}
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	serverRunning atomic.Bool
@@ -59,13 +44,12 @@ func (s *Server) listen() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if s.serverRunning.Load() {
-				log.Printf("unable to accept new connection: %v", err)
-				continue
-			} else {
-				log.Printf("server is closed")
+			if s.serverRunning.Load() == false {
+				log.Print("server is closed")
 				return
 			}
+			log.Printf("unable to accept new connection: %v", err)
+			continue
 		}
 		go s.handle(conn)
 	}
@@ -73,28 +57,16 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-
+	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		hErr := &HandlerError{
-			StatusCode: response.StatusCodeBadRequest,
-			Message:    err.Error(),
-		}
-		hErr.Write(conn)
+		w.WriteStatusLine(response.StatusCodeBadRequest)
+		b := fmt.Sprintf("unable to parse request: %v", err)
+		body := []byte(b)
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
 		return
 	}
-
-	buf := bytes.NewBuffer([]byte{})
-	hErr := s.handler(buf, req)
-	if hErr != nil {
-		hErr.Write(conn)
-		return
-	}
-
-	b := buf.Bytes()
-	response.WriteStatusLine(conn, response.StatusCodeOK)
-	headers := response.GetDefaultHeaders(len(b))
-	response.WriteHeaders(conn, headers)
-	conn.Write(b)
+	s.handler(w, req)
 	return
 }

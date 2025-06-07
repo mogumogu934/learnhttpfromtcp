@@ -11,6 +11,10 @@ const CRLF = "\r\n"
 
 type Headers map[string]string
 
+func NewHeaders() Headers {
+	return Headers{}
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	endIndex := bytes.Index(data, []byte(CRLF))
 	if endIndex == -1 {
@@ -55,10 +59,26 @@ func validateFieldName(fieldName string) (valid bool) {
 			return false
 		}
 	}
-
 	return true
 }
 
 func (h Headers) Get(key string) (value string) {
 	return h[strings.ToLower(key)]
+}
+
+func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
+	v, ok := h[key]
+	if ok {
+		value = strings.Join([]string{
+			v,
+			value,
+		}, ", ")
+	}
+	h[key] = value
+}
+
+func (h Headers) Overwrite(key, value string) {
+	k := strings.ToLower(key)
+	h[k] = value
 }
