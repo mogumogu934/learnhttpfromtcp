@@ -1,9 +1,12 @@
 package main
 
 import (
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/mogumogu934/learnhttpfromtcp/internal/request"
@@ -28,13 +31,25 @@ func main() {
 }
 
 func handler(w *response.Writer, req *request.Request) {
-	statusCode := response.StatusCodeOK
-	body := []byte("")
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin") {
+		proxyHandler(w, req)
+		return
+	}
+	if req.RequestLine.RequestTarget == "/yourproblem" {
+		handler400(w, req)
+		return
+	}
+	if req.RequestLine.RequestTarget == "/myproblem" {
+		handler500(w, req)
+		return
+	}
+	handler200(w, req)
+	return
+}
 
-	switch req.RequestLine.RequestTarget {
-	case "/yourproblem":
-		statusCode = response.StatusCodeBadRequest
-		body = []byte(`<html>
+func handler400(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeBadRequest)
+	body := []byte(`<html>
 <head>
 <title>400 Bad Request</title>
 </head>
@@ -44,9 +59,16 @@ func handler(w *response.Writer, req *request.Request) {
 </body>
 </html>
 `)
-	case "/myproblem":
-		statusCode = response.StatusCodeInternalServerError
-		body = []byte(`<html>
+	h := response.GetDefaultHeaders(len(body))
+	h.Overwrite("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+	return
+}
+
+func handler500(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeInternalServerError)
+	body := []byte(`<html>
 <head>
 <title>500 Internal Server Error</title>
 </head>
@@ -56,8 +78,16 @@ func handler(w *response.Writer, req *request.Request) {
 </body>
 </html>
 `)
-	default:
-		body = []byte(`<html>
+	h := response.GetDefaultHeaders(len(body))
+	h.Overwrite("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+	return
+}
+
+func handler200(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeOK)
+	body := []byte(`<html>
 <head>
 <title>200 OK</title>
 </head>
@@ -67,11 +97,53 @@ func handler(w *response.Writer, req *request.Request) {
 </body>
 </html>
 `)
-	}
-
-	w.WriteStatusLine(statusCode)
 	h := response.GetDefaultHeaders(len(body))
 	h.Overwrite("Content-Type", "text/html")
 	w.WriteHeaders(h)
 	w.WriteBody(body)
+	return
+}
+
+func proxyHandler(w *response.Writer, req *request.Request) {
+	url := "https://httpbin.org/" + strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
+	resp, err := http.Get(url)
+	if err != nil {
+		handler500(w, req)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.WriteStatusLine(response.StatusCodeOK)
+	h := response.GetDefaultHeaders(0)
+	delete(h, "Content-Length")
+	h.Set("Transfer-Encoding", "chunked")
+	w.WriteHeaders(h)
+
+	const maxChunkSize = 1024
+	buf := make([]byte, maxChunkSize)
+
+	for {
+		n, err := resp.Body.Read(buf)
+
+		if n > 0 {
+			_, err = w.WriteChunkedBody(buf[:n])
+			if err != nil {
+				log.Println("unable to write chunked body:", err)
+				break
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Println("unable to read response body:", err)
+			break
+		}
+	}
+
+	_, err = w.WriteChunkedBodyDone()
+	if err != nil {
+		log.Println("unable to write chunked body done:", err)
+	}
 }
